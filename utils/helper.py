@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from curl_cffi import requests
 from fastapi import HTTPException
+from services.config import BASE_DIR
 from services.proxy_service import proxy_settings
 from utils.log import logger
 
@@ -23,7 +24,7 @@ PREFIXED_CODEX_IMAGE_MODELS = {
 }
 IMAGE_MODELS = BASE_IMAGE_MODELS | PREFIXED_CODEX_IMAGE_MODELS
 PUBLIC_IMAGE_MODELS = BASE_IMAGE_MODELS | PREFIXED_CODEX_IMAGE_MODELS
-OUTPUT_DIR = Path(__file__).resolve().parent / "output"
+OUTPUT_DIR = BASE_DIR / "data" / "output"
 
 SUPPORTED_JSON_IMAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
 MAX_JSON_IMAGE_BYTES = 10 * 1024 * 1024

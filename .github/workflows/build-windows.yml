@@ -1,0 +1,99 @@
+name: Build Windows Installer
+
+# 打 tag（v1.8.0 之类）时自动构建并发布安装包；
+# 也可以在 Actions 页面手动触发，仅产出构建产物。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（留空则读取仓库 VERSION 文件）"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+          }
+          if (-not $version) {
+            $version = (Get-Content VERSION -Raw).Trim()
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "版本号: $version"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $isl = "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
+          if (-not (Test-Path -LiteralPath $isl)) {
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $isl) | Out-Null
+            try {
+              Invoke-WebRequest -UseBasicParsing -Uri `
+                "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" `
+                -OutFile $isl
+            }
+            catch {
+              Write-Warning "中文语言包下载失败，安装界面将使用英文：$_"
+            }
+          }
+
+      - name: Build portable bundle and installer
+        shell: pwsh
+        run: |
+          pwsh -ExecutionPolicy Bypass -File packaging\build_windows.ps1 `
+            -Version "${{ steps.version.outputs.version }}"
+
+      - name: List artifacts
+        shell: pwsh
+        run: Get-ChildItem -Path dist\windows -Recurse -File | Select-Object FullName, Length
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatGPT2API-windows-x64-${{ steps.version.outputs.version }}
+          path: |
+            dist/windows/*.zip
+            dist/windows/*setup.exe
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/windows/*setup.exe
+            dist/windows/*.zip
+          generate_release_notes: true
