@@ -186,6 +186,12 @@ try {
                 Write-Host "  （未检测到中文语言包，安装界面将使用英文）"
             }
             & $Iscc @defines (Join-Path $PSScriptRoot "installer.iss")
+            # 语言包与编译器版本不匹配时不至于整个构建失败：退回纯英文界面重试
+            if ($LASTEXITCODE -ne 0 -and ($defines -contains "/DIncludeChinese=1")) {
+                Write-Warning "带中文语言包编译失败，改用纯英文界面重试"
+                $fallback = $defines | Where-Object { $_ -ne "/DIncludeChinese=1" }
+                & $Iscc @fallback (Join-Path $PSScriptRoot "installer.iss")
+            }
             if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败" }
         }
     }
